@@ -7,10 +7,11 @@
 Keyboard Input    -> Controller Input (DS4) 
 - Left Arrow Key    -> Left Trigger
 - Right Arrow Key   -> Right Trigger
-- Enter/Spacebar/Y  -> Button (X)
+- Spacebar          -> Button (X)
 - Esc               -> Button (O)
 - I                 -> Button (Square)
 - T                 -> Button (Trigangle)
+- Enter/P/Y         -> Button (Options)
 
 Suggested Power Ups Configuration
 - Power Up 1 
