@@ -598,6 +598,10 @@ proc CheckAndHitAlien
 	mov [word ptr PlayerBulletLineLocation], 0
 	mov [word ptr PlayerShootingRowLocation], 0
 
+	; Increase and update combo upon consecutive hit (unfinished): 
+	call IncrementCombo ; #Jieco
+	call UpdateComboStat 
+
 	;Increase and update score:
 	inc [byte ptr Score]
 	call UpdateScoreStat

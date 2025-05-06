@@ -63,7 +63,6 @@ include "Library/Strings.asm"
 	AliensStatusArray				db	24 dup (?)
 
 	AliensLoopMoveCounter			db	? ;Aliens move every 4 repeats of the game loop
-
 	
 	ShooterLineLocation				equ 149
 	ShooterRowLocation				dw	?
@@ -81,6 +80,7 @@ include "Library/Strings.asm"
 	AliensShootingRowLocations	dw	10 dup (?)
 
 	Score							db	?
+
 	LivesRemaining					db	?
 	Level							db	?
 
@@ -104,6 +104,7 @@ include "Library/Strings.asm"
 CODESEG
 include "Library/Alien.asm"
 include "Library/Procs.asm"
+include "Library/Combo.asm" ; #Jieco
 
 ; -----------------------------------------------------------
 ; Prints the background image of the game (space background)
@@ -158,13 +159,16 @@ proc PrintStatsArea
 	;Score label:
 	xor bh, bh
 	mov dh, 23
-	mov dl, 29
+	mov dl, 24 ; 29
 	mov ah, 2
 	int 10h
 
 	mov ah, 9
 	mov dx, offset ScoreString
 	int 21h
+
+	;Combo label #Jieco:
+	call DisplayCombo
 
 	ret
 endp PrintStatsArea
@@ -222,7 +226,7 @@ endp UpdateLives
 proc UpdateScoreStat
 	xor bh, bh
 	mov dh, 23
-	mov dl, 36
+	mov dl, 31
 	mov ah, 2
 	int 10h
 
@@ -242,7 +246,6 @@ proc UpdateScoreStat
 
 	ret
 endp UpdateScoreStat
-
 
 ; -------------------------------------------
 ; Updates the level and score shown on screen
@@ -279,7 +282,6 @@ proc MoveToStart
 
 	mov [byte ptr AliensPrintStartLine], 10
 	mov [byte ptr AliensPrintStartRow], 8
-
 
 	mov [word ptr ShooterRowLocation], 152
 	mov [byte ptr PlayerShootingExists], 0
@@ -499,6 +501,7 @@ proc PlayGame
 	call PrintStatsArea
 	call UpdatePlayerStats
 	call UpdateLives
+	call UpdateComboStat ; #Jieco
 
 	call CheckAndMoveAliens
 
@@ -762,6 +765,9 @@ proc PlayGame
 
 	pop cx
 	loop @@blinkShooter
+
+	; reset combo #Jieco
+	mov [byte ptr COMBO_VAL], 0
 
 	;sub 5 score if possible, if he doesn't have 5 yet, just reset to 0:
 	cmp [byte ptr Score], 5
