@@ -288,7 +288,6 @@ proc MoveToStart
 
 	mov [byte ptr AliensShootingCurrentAmount], 0
 
-
 	cld
 	push ds
 	pop es
@@ -677,6 +676,9 @@ proc PlayGame
 	jmp @@clearShot
 
 @@removeShot:
+	call ResetCombo				; Resets combo #Jieco
+	call UpdateComboStat	; Reflect changes on screen 
+
 	mov [byte ptr PlayerShootingExists], 0
 	mov [word ptr PlayerBulletLineLocation], 0
 	mov [word ptr PlayerShootingRowLocation], 0
@@ -684,7 +686,6 @@ proc PlayGame
 @@clearShot:
 	push 2
 	call Delay
-
 
 	;Clear shot:
 	push ShootingLength
@@ -780,8 +781,8 @@ proc PlayGame
 	pop cx
 	loop @@blinkShooter
 
-	; reset combo #Jieco
-	mov [byte ptr COMBO_VAL], 0
+	; reset combo #Jieco 
+	call ResetCombo
 
 	;sub 5 score if possible, if he doesn't have 5 yet, just reset to 0:
 	cmp [byte ptr Score], 5
