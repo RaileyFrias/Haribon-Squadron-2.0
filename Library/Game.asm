@@ -669,6 +669,11 @@ proc PlayGame
     
     mov [byte ptr FreezeActive], 1   ; Activate freeze
     mov [word ptr FreezeCounter], 54 ; Set duration (3 seconds; 18 ticks/second)
+
+	; Force redraw of aliens to show frozen state immediately
+    call ClearAliens
+    call PrintAliens
+    
     jmp @@readKey
 
 @@regenerateHeart:
