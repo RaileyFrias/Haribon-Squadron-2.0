@@ -4,6 +4,9 @@
 ; and high score table.
 ; -------------------------------------------------------
 
+DATASEG
+	InstructionsScreen	db	?
+
 CODESEG
 
 TableNameColumn			equ	13
@@ -401,25 +404,105 @@ proc PrintInstructions
 	push offset InstructionsFileHandle
 	call OpenFile
 
+	push offset GLInfoFileName
+	push offset GLInfoFileHandle
+	call OpenFile
+
+	push offset GKInfoFileName
+	push offset GKInfoFileHandle
+	call OpenFile
+
 	cmp ax, 0 ;check if there's an error opening file
-	jne @@printImage
+	jne @@printInstruct
 
 	push 18 ;wait 1 second
 	call Delay
 
 	ret
 
-@@printImage:
+
+@@printGLInfo:
+	mov [byte ptr InstructionsScreen], 0
+	push [GLInfoFileHandle]
+	push offset FileReadBuffer
+	call PrintFullScreenBMP
+	jmp @@setKey
+
+@@printGKInfo:
+	mov [byte ptr InstructionsScreen], 2
+	push [GKInfoFileHandle]
+	push offset FileReadBuffer
+	call PrintFullScreenBMP
+	jmp @@setKey
+
+@@printInstruct:
+	mov [byte ptr InstructionsScreen], 1
 	push [InstructionsFileHandle]
 	push offset FileReadBuffer
 	call PrintFullScreenBMP
 
-	push [InstructionsFileHandle]
-	call CloseFile
+@@setKey:
+	cmp [byte ptr InstructionsScreen], 1
+	je @@instructScreenKeys
 
+	cmp [byte ptr InstructionsScreen], 0
+	je @@gLInfoKeys
+
+	cmp [byte ptr InstructionsScreen], 2
+	je @@gKInfoKeys
+
+@@instructScreenKeys:
 	;wait for key:
 	xor ah, ah
 	int 16h
+
+	cmp ah, 01;		esc
+	je @@exitInstructions
+
+	cmp ah, 4dh;	right arrow
+	je @@printGKInfo
+
+	cmp ah, 4bh;	left arrow
+	je @@printGLInfo
+
+	jmp @@instructScreenKeys
+
+@@gLInfoKeys:
+	;wait for key:
+	xor ah, ah
+	int 16h
+
+	cmp ah, 01;		esc
+	je @@exitInstructions
+
+	cmp ah, 4dh;	right arrow
+	je @@printInstruct
+
+	jmp @@gLInfoKeys
+
+@@gKInfoKeys:
+	;wait for key:
+	xor ah, ah
+	int 16h
+
+	cmp ah, 01;		esc
+	je @@exitInstructions
+
+	cmp ah, 4bh;	right arrow
+	je @@printInstruct
+
+	jmp @@gKInfoKeys
+
+
+@@exitInstructions:
+	push [GKInfoFileHandle]
+	call CloseFile
+
+	push [GLInfoFileHandle]
+	call CloseFile
+
+	push [InstructionsFileHandle]
+	call CloseFile
 
 	ret
 endp PrintInstructions

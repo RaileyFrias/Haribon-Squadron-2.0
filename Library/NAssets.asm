@@ -13,3 +13,9 @@ DATASEG
 
 	InstructionsFileName			db	'Assets/Instruct.bmp',0
 	InstructionsFileHandle			dw	?
+
+	GLInfoFileName					db	'Assets/GLInfo.bmp',0
+	GLInfoFileHandle				dw	?
+		
+	GKInfoFileName					db	'Assets/GKInfo.bmp',0
+	GKInfoFileHandle				dw	?
