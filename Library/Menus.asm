@@ -49,6 +49,42 @@ proc PrintOpening
     
 endp PrintOpening
 
+proc PrintOpening2
+@@printOpening:
+    push offset Opening2FileName
+    push offset Opening2FileHandle
+    call OpenFile
+
+    push [Opening2FileHandle]
+    push offset FileReadBuffer
+    call PrintFullScreenBMP
+
+    push [Opening2FileHandle]
+    call CloseFile
+
+@@getKeyOpening:
+    xor ah, ah
+    int 16h
+
+    ; check if user pressed 'enter' key
+    cmp ah, 1Ch; Enter key
+    je @@procEnd
+
+    cmp ah, 01h ;Esc key
+    je @@exitProgram
+    jmp @@getKeyOpening
+
+@@exitProgram:
+    mov ah, 4Ch ; function to terminate program
+    call ClearScreen
+    int 21h ; DOS interrupt
+
+@@procEnd:
+    call ClearScreen
+    ret
+    
+endp PrintOpening2
+
 ; ----------------------------------------
 ; Print the main menu, handle user choices
 ; ----------------------------------------

@@ -8,5 +8,8 @@ DATASEG
 	OpeningFileName					db	'Assets/Opening.bmp',0
 	OpeningFileHandle				dw	?
 
+	Opening2FileName				db	'Assets/Opening2.bmp',0
+	Opening2FileHandle				dw	?
+
 	InstructionsFileName			db	'Assets/Instruct.bmp',0
 	InstructionsFileHandle			dw	?
