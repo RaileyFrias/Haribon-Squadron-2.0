@@ -184,6 +184,22 @@ proc PrintStatsArea
 	push [BatteryFileHandle]
 	call CloseFile
 
+; @@printHealth:
+; 	push offset BHealthFileName
+; 	push offset BHealthFileHandle	
+; 	call OpenFile
+
+; 	push [BHealthFileHandle]
+; 	push BHealthLength
+; 	push BHealthHeight
+; 	push BHealthPrintStartLine
+; 	push BHealthPrintStartRow
+; 	push offset FileReadBuffer
+; 	call PrintBMP
+
+; 	push [BHealthFileHandle]
+; 	call CloseFile
+
 	;Score label:
 	xor bh, bh
 	mov dh, ScorePrintStartLine

@@ -8,6 +8,8 @@
 
 DATASEG
 	COMBO_STRING    db  '| ', '$' ; label
+	COMBO_Y				equ	37
+	COMBO_X				equ 19
 
 	COMBO_ACTIVE 			db 	0   ; sets state of combo
 	COMBO_KILL_COUNT	db 	?		; kill count for combo trigger
@@ -33,8 +35,8 @@ CODESEG
 
 proc DisplayCombo ; called in Game.asm, search word "#Jieco"
 	xor bh, bh
-	mov dh, 23
-	mov dl, 35
+	mov dh, COMBO_Y
+	mov dl, COMBO_X
 	mov ah, 2
 	int 10h
 	mov ah, 9
