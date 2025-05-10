@@ -11,6 +11,11 @@ include "Library/GAssets.asm"
 include "Library/NAssets.asm"
 
 	DebugBool						db	0
+
+; -----------------------------------------------------------
+; Accessing bitmap files and text files for the game assets
+; -----------------------------------------------------------
+
 	FreezeActive					db	0    ; Freeze state flag
 	FreezeCounter					dw	0    ; Counter for freeze duration
 	InvincibleActive				db	0    ; Invincibility state flag
@@ -38,6 +43,10 @@ include "Library/NAssets.asm"
 	PlayerBulletLineLocation 		dw	?
 	PlayerShootingRowLocation		dw	?
 
+	SecondaryShootingExists			db	?
+	SecondaryBulletLineLocation		dw	?
+	SecondaryShootingRowLocation	dw	?
+
 	AliensShootingMaxAmount		db	?
 	AliensShootingCurrentAmount	db	?
 	AliensShootingLineLocations	dw	10 dup (?)
@@ -57,6 +66,9 @@ include "Library/NAssets.asm"
 	StatsAreaBorderLine				equ	175
 
 	FileReadBuffer					db	320 dup (?)
+
+	LaserEnabled	 				db 	?
+	AOEEnabled						db	0
 
 	;Color values:
 	BlackColor						equ	0
@@ -320,6 +332,12 @@ proc InitializeGame
 	mov [byte ptr LivesRemaining], 3
 	mov [byte ptr Level], 1
 
+	mov [byte ptr LaserEnabled], 0
+
+
+	push offset ExplosionFileName
+	push offset ExplosionFileHandle
+	call OpenFile
 
 	call InitializeLevel
 
@@ -582,16 +600,39 @@ proc PlayGame
     cmp ah, 4Dh ; Right
     je @@moveRight
 
-    cmp ah, 2Dh ; X key for freeze
+	cmp ah, 2Dh ; X (Laser Enable)
+	je @@enableLaser
+
+	cmp ah, 2Fh ; V (AOE Enable) 
+	je @@enableAOE
+	
+    cmp ah, 2Ch ; Z (Freeze)
     je @@freezePressed
 
-    cmp ah, 2Eh ; C key for invincibility
+    cmp ah, 2Eh ; C (Invincibility)
     je @@invincibilityPressed
 
-    cmp ah, 2Ch ; Z (Regenerate Heart)
+    cmp ah, 13h ; R (Regenerate Heart)
     je @@regenerateHeart
 
-    jmp @@readKey
+	cmp ah, 10h ; Q (Secondary Shot)
+    je @@secondaryShootPressed
+
+    jmp @@printShooterAgain
+
+@@secondaryShootPressed:
+    cmp [byte ptr SecondaryShootingExists], 0
+    jne @@printShooterAgain
+    call playSoundShoot
+
+    mov ax, ShooterLineLocation
+    sub ax, 6
+    mov [word ptr SecondaryBulletLineLocation], ax
+    mov ax, [ShooterRowLocation]
+    add ax, 7
+    mov [word ptr SecondaryShootingRowLocation], ax
+    mov [byte ptr SecondaryShootingExists], 1
+    jmp @@printShooterAgain
 
 @@invincibilityPressed:
     call CheckSkillAvailability    ; Check if skills are available based on current combo
@@ -639,6 +680,14 @@ proc PlayGame
     call UpdateComboStat         ; Update combo display
     call UpdateLives
     jmp @@readKey
+
+@@enableLaser:
+	mov [byte ptr LaserEnabled], 1
+    je @@shootPressed
+
+@@enableAOE:
+	mov [byte ptr AOEEnabled], 1
+    je @@shootPressed
 
 @@moveLeft:
     cmp [word ptr ShooterRowLocation], 21
@@ -718,17 +767,51 @@ proc PlayGame
 	call PrintBMP
 
 @@checkShotStatus:
+    ; Handle secondary shot movement and clearing
+    cmp [byte ptr SecondaryShootingExists], 1
+    jne @@checkMainShot
+    
+    ; Clear previous shot position
+    push ShootingLength
+    push ShootingHeight
+    push [word ptr SecondaryBulletLineLocation]
+    push [word ptr SecondaryShootingRowLocation]
+    push BlackColor
+    call PrintColor
+    
+    cmp [word ptr SecondaryBulletLineLocation], 10
+    jb @@removeSecondaryShot
+    
+    sub [word ptr SecondaryBulletLineLocation], 10
+    
+    ; Print new shot position
+    push ShootingLength
+    push ShootingHeight
+    push [word ptr SecondaryBulletLineLocation]
+    push [word ptr SecondaryShootingRowLocation]
+    push RedColor
+    call PrintColor
+    
+    ; Check for alien hits
+    call CheckAndHitAlienSecondary
+    jmp @@checkMainShot
+	
 	; Update invincibility counter if active
 	cmp [InvincibleCounter], 0
-	je @@checkPlayerShot
+	je @@checkMainShot
 	
 	dec [InvincibleCounter]
 	cmp [InvincibleCounter], 0
-	jne @@checkPlayerShot
+	jne @@checkMainShot
 	
 	mov [byte ptr InvincibleActive], 0   ; Disable invincibility when counter reaches 0
+    
+@@removeSecondaryShot:
+    mov [byte ptr SecondaryShootingExists], 0
+    mov [word ptr SecondaryBulletLineLocation], 0
+    mov [word ptr SecondaryShootingRowLocation], 0
 
-@@checkPlayerShot:
+@@checkMainShot:
 	;Check if shooting already exists in screen:
 	cmp [byte ptr PlayerShootingExists], 0
 	jne @@moveShootingUp
@@ -753,22 +836,65 @@ proc PlayGame
 	mov [word ptr PlayerShootingRowLocation], ax
 
 	mov [byte ptr PlayerShootingExists], 1
-	jmp @@printShooting
 
-@@moveShootingUp:
-	cmp [word ptr PlayerBulletLineLocation], 10
-	jb @@removeShot
+	cmp [byte ptr LaserEnabled], 1
+	jne @@printShooting
 
-	sub [word ptr PlayerBulletLineLocation], 10
+	; Print laser
+	mov ax, [PlayerBulletLineLocation]  ; starting Y position
+	sub ax, 130                      ; Move up for height
+	mov [PlayerBulletLineLocation], ax   
+
+	push ShootingLength
+	push 140        ; height
+	push [word ptr PlayerBulletLineLocation]
+	push [word ptr PlayerShootingRowLocation]
+	push BlueColor
+	call PrintColor
+	jmp @@clearShot
 
 @@printShooting:
+	; Regular shot printing
 	push ShootingLength
 	push ShootingHeight
 	push [word ptr PlayerBulletLineLocation]
 	push [word ptr PlayerShootingRowLocation]
 	push BlueColor
 	call PrintColor
+	jmp @@clearShot
 
+@@moveShootingUp:
+	cmp [word ptr PlayerBulletLineLocation], 10
+	jb @@removeShot
+
+	; Clear previous shot
+	push ShootingLength
+	mov ax, ShootingHeight
+	cmp [byte ptr LaserEnabled], 1
+	jne @@normalClearMove
+	mov ax, 140    ; Laser height
+@@normalClearMove:
+	push ax
+	push [word ptr PlayerBulletLineLocation]
+	push [word ptr PlayerShootingRowLocation]
+	push BlackColor
+	call PrintColor
+
+	; Move shot up
+	sub [word ptr PlayerBulletLineLocation], 10
+
+	; Print new shot position
+	push ShootingLength
+	mov ax, ShootingHeight
+	cmp [byte ptr LaserEnabled], 1
+	jne @@normalPrintMove
+	mov ax, 140    ; Laser height
+@@normalPrintMove:
+	push ax
+	push [word ptr PlayerBulletLineLocation]
+	push [word ptr PlayerShootingRowLocation]
+	push BlueColor
+	call PrintColor
 	jmp @@clearShot
 
 @@removeShot:
@@ -783,9 +909,14 @@ proc PlayGame
 	push 2
 	call Delay
 
-	;Clear shot:
+	; Clear shot with appropriate height
 	push ShootingLength
-	push ShootingHeight
+	mov ax, ShootingHeight
+	cmp [byte ptr LaserEnabled], 1
+	jne @@normalClear
+	mov ax, 140    ; Same height as laser
+@@normalClear:
+	push ax
 	push [word ptr PlayerBulletLineLocation]
 	push [word ptr PlayerShootingRowLocation]
 	push BlackColor
@@ -1063,6 +1194,9 @@ proc PlayGame
 	call CloseFile
 
 	push [AlienFileHandle]
+	call CloseFile
+
+	push [ExplosionFileHandle]
 	call CloseFile
 
 	ret

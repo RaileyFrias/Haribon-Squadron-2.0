@@ -44,3 +44,8 @@ DATASEG
 	HeartFileHandle					dw	?
 	HeartLength						equ	16
 	HeartHeight						equ	16
+
+	ExplosionFileName				db	'Assets/Explode.bmp',0
+	ExplosionFileHandle				dw	?
+	ExplosionLength					equ	32
+	ExplosionHeight					equ	32
