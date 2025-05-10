@@ -19,3 +19,9 @@ DATASEG
 		
 	GKInfoFileName					db	'Assets/GKInfo.bmp',0
 	GKInfoFileHandle				dw	?
+
+	GLSelectFileName				db	'Assets/GLSelect.bmp',0
+	GLSelectFileHandle				dw	?
+
+	GKSelectFileName				db	'Assets/GKSelect.bmp',0
+	GKSelectFileHandle				dw	?

@@ -6,6 +6,7 @@
 
 DATASEG
 	InstructionsScreen	db	?
+	ShipSelect			db 	?	 ; GL = 0, GL = 1
 
 CODESEG
 
@@ -124,6 +125,11 @@ proc PrintMainMenu
 	jmp @@getKey
 
 @@play:
+	call PrintShipSelection
+
+	cmp al, 1
+	je @@printMenu
+	
 	call PlayGame
 
 	;try to open file, if missing it's ok:
@@ -394,7 +400,70 @@ proc PrintMainMenu
 	call ClearScreen
 	ret
 endp PrintMainMenu
+; -----------------------------
+; Prints ship selection menu
+; -----------------------------
+proc PrintShipSelection
+	xor al, al
 
+	push offset GLSelectFileName
+	push offset GLSelectFileHandle
+	call OpenFile
+
+	push offset GKSelectFileName
+	push offset GKSelectFileHandle 
+	call OpenFile
+
+@@printGLSelect:
+	mov [byte ptr ShipSelect], 0
+
+	push [GLSelectFileHandle]
+	push offset FileReadBuffer
+	call PrintFullScreenBMP
+	jmp @@getKey
+
+@@printGKSelect:
+	mov [byte ptr ShipSelect], 1
+
+	push [GKSelectFileHandle]
+	push offset FileReadBuffer
+	call PrintFullScreenBMP
+	jmp @@getKey
+
+@@getKey:
+	;wait for key:
+	xor ah, ah
+	int 16h
+
+	cmp ah, 4dh ;right arrow
+	je @@printGKSelect
+
+	cmp ah, 4bh ;left arrow
+	je @@printGLSelect
+
+	cmp ah, 1 ;Esc key
+	je @@exitShipSelection
+
+	cmp ah, 1ch ;enter key
+	je @@proceed
+
+	jmp @@getKey
+
+@@exitShipSelection:
+	mov al, 1
+	jmp @@procEnd
+
+@@proceed:
+	xor al, al
+
+@@procEnd:
+	push [GKSelectFileHandle]
+	call CloseFile
+
+	push [GLSelectFileHandle]
+	call CloseFile
+	ret
+endp PrintShipSelection
 
 ; -----------------------------
 ; Prints the instructions menu
