@@ -53,7 +53,7 @@ include "Library/NAssets.asm"
 	AliensShootingLineLocations	dw	10 dup (?)
 	AliensShootingRowLocations	dw	10 dup (?)
 
-	Score							db	?
+	Score							dw	?
 
 	LivesRemaining					db	?
 	Level							db	?
@@ -275,7 +275,7 @@ proc UpdateScoreStat
 	int 10h
 
 	xor ah, ah
-	mov al, [Score]
+	mov ax, [Score]
 	push ax
 	call HexToDecimal
 
@@ -385,12 +385,40 @@ proc InitializeLevel
 
 @@checkLevelFive:
 	cmp [byte ptr Level], 5
-	jne @@setLevelSix
+	jne @@checkLevelSix
 
 	mov [byte ptr AliensShootingMaxAmount], 9
 	jmp @@resetDidNotDieBool
 
-@@setLevelSix:
+@@checkLevelSix:
+	cmp [byte ptr Level], 6
+	jne @@checkLevelSeven
+
+	mov [byte ptr AliensShootingMaxAmount], 10
+	jmp @@resetDidNotDieBool
+
+@@checkLevelSeven:
+	cmp [byte ptr Level], 7
+	jne @@checkLevelEight
+
+	mov [byte ptr AliensShootingMaxAmount], 10
+	jmp @@resetDidNotDieBool
+
+@@checkLevelEight:
+	cmp [byte ptr Level], 8
+	jne @@checkLevelNine
+
+	mov [byte ptr AliensShootingMaxAmount], 10
+	jmp @@resetDidNotDieBool
+
+@@checkLevelNine:
+	cmp [byte ptr Level], 9
+	jne @@setLevelTen
+
+	mov [byte ptr AliensShootingMaxAmount], 10
+	jmp @@resetDidNotDieBool
+
+@@setLevelTen:
 	mov [byte ptr AliensShootingMaxAmount], 10
 
 @@resetDidNotDieBool:
@@ -1156,7 +1184,7 @@ proc PlayGame
 	int 21h
 	
 	xor ah, ah
-	mov al, [Score]
+	mov ax, [Score]
 	push ax
 	call HexToDecimal
 
@@ -1204,7 +1232,7 @@ proc PlayGame
 
 @@SkipPerfectLevelBonus:
 
-	cmp [byte ptr Level], 6 ; maximum level
+	cmp [byte ptr Level], 9 ; maximum level is now 9
 	je @@printWin
 
 
@@ -1215,6 +1243,7 @@ proc PlayGame
 	jmp @@firstLevelPrint
 
 @@printWin:
+; Print win message to user (finished 6 levels):
 ; Print win message to user (finished 6 levels):
 
 	call PrintBackground
@@ -1241,7 +1270,7 @@ proc PlayGame
 	int 21h
 
 	xor ah, ah
-	mov al, [Score]
+	mov ax, [Score]
 	push ax
 	call HexToDecimal
 
