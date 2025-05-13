@@ -23,6 +23,7 @@ include "Library/NAssets.asm"
 	
 ; -----------------------------------------------------------
 ; Aliens and player locations, movements, shootings, etc...
+; (Row = X, Line = Y)  
 ; -----------------------------------------------------------
 	AliensMoveRightBool				db	?
 	AliensMovesToSideDone			db	?
@@ -52,16 +53,42 @@ include "Library/NAssets.asm"
 	AliensShootingLineLocations	dw	10 dup (?)
 	AliensShootingRowLocations	dw	10 dup (?)
 
-	Score							db	?
+	Score							dw	?
 
 	LivesRemaining					db	?
 	Level							db	?
 
 	DidNotDieInLevelBool			db	?
 
+	LevelPrintStartLine				equ		23
+	LevelPrintStartRow				equ		2
 
-	HeartsPrintStartLine			equ	182
-	HeartsPrintStartRow				equ	125
+	LevelValPrintStartLine		equ 	23
+	LevelValPrintStartRow			equ 	7
+
+	BatteryPrintStartLine			equ 180
+	BatteryPrintStartRow			equ 100
+
+	BHealthPrintStartLine			equ 183
+	BHealthPrintStartRow			equ	103
+
+	HeartsPrintStartLine			equ	182		; to be replaced
+	HeartsPrintStartRow				equ	75
+
+	Skill1PrintStartLine		equ		180
+	Skill1PrintStartRow			equ		140
+
+	Skill2PrintStartLine		equ		180
+	Skill2PrintStartRow			equ		160
+
+	Skill3PrintStartLine		equ		180
+	Skill3PrintStartRow			equ		180
+
+	ScorePrintStartLine				equ		23
+	ScorePrintStartRow				equ		28
+
+	ScoreValPrintStartLine		equ 	23
+	ScoreValPrintStartRow			equ		35
 
 	StatsAreaBorderLine				equ	175
 
@@ -69,6 +96,7 @@ include "Library/NAssets.asm"
 
 	LaserEnabled	 				db 	?
 	AOEEnabled						db	0
+	AOEKillDirection				db  0 ; 0 - None, 1 - Right, 2 - Left (For splatter)
 
 	;Color values:
 	BlackColor						equ	0
@@ -76,11 +104,13 @@ include "Library/NAssets.asm"
 	RedColor						equ	40
 	BlueColor						equ	54
 	WhiteColor						equ	255
+	OrangeColor						equ 6
+	YellowColor					    equ 0Eh 
 
 CODESEG
 include "Library/Alien.asm"
 include "Library/Procs.asm"
-include "Library/Combo.asm" ; #Jieco
+include "Library/Combo.asm"
 
 ; -----------------------------------------------------------
 ; Prints the background image of the game (space background)
@@ -120,10 +150,10 @@ proc PrintStatsArea
 
 	;Print labels:
 
-	;Level label:
+	;Level label: 
 	xor bh, bh
-	mov dh, 23
-	mov dl, 1
+	mov dh, LevelPrintStartLine
+	mov dl, LevelPrintStartRow
 	mov ah, 2
 	int 10h
 
@@ -131,20 +161,113 @@ proc PrintStatsArea
 	mov dx, offset LevelString
 	int 21h
 
+@@printGLSkill1:
+	push offset GLSkill1FileName
+	push offset GLSkill1FileHandle	
+	call OpenFile
+
+	push [GLSkill1FileHandle]
+	push SkillLength
+	push SkillHeight
+	push Skill1PrintStartLine
+	push Skill1PrintStartRow
+	push offset FileReadBuffer
+	call PrintBMP
+
+	push [GLSkill1FileHandle]
+	call CloseFile
+
+@@printGLSkill2:
+	push offset GLSkill2FileName
+	push offset GLSkill2FileHandle	
+	call OpenFile
+
+	push [GLSkill2FileHandle]
+	push SkillLength
+	push SkillHeight
+	push Skill2PrintStartLine
+	push Skill2PrintStartRow
+	push offset FileReadBuffer
+	call PrintBMP
+
+	push [GLSkill2FileHandle]
+	call CloseFile
+
+@@printGLSkill3:
+	push offset GLSkill3FileName
+	push offset GLSkill3FileHandle	
+	call OpenFile
+
+	push [GLSkill3FileHandle]
+	push SkillLength
+	push SkillHeight
+	push Skill3PrintStartLine
+	push Skill3PrintStartRow
+	push offset FileReadBuffer
+	call PrintBMP
+
+	push [GLSkill3FileHandle]
+	call CloseFile
+
+
+; @@printSkills:		; #Skills
+; 	push offset SkillsFileName
+; 	push offset SkillsFileHandle	
+; 	call OpenFile
+
+; 	push [SkillsFileHandle]
+; 	push SkillsLength
+; 	push SkillsHeight
+; 	push SkillsPrintStartLine
+; 	push SkillsPrintStartRow
+; 	push offset FileReadBuffer
+; 	call PrintBMP
+
+; 	push [SkillsFileHandle]
+; 	call CloseFile
+
+@@printBattery:
+	push offset BatteryFileName
+	push offset BatteryFileHandle	
+	call OpenFile
+
+	push [BatteryFileHandle]
+	push BatteryLength
+	push BatteryHeight
+	push BatteryPrintStartLine
+	push BatteryPrintStartRow
+	push offset FileReadBuffer
+	call PrintBMP
+
+	push [BatteryFileHandle]
+	call CloseFile
+
+; @@printHealth:
+; 	push offset BHealthFileName
+; 	push offset BHealthFileHandle	
+; 	call OpenFile
+
+; 	push [BHealthFileHandle]
+; 	push BHealthLength
+; 	push BHealthHeight
+; 	push BHealthPrintStartLine
+; 	push BHealthPrintStartRow
+; 	push offset FileReadBuffer
+; 	call PrintBMP
+
+; 	push [BHealthFileHandle]
+; 	call CloseFile
 
 	;Score label:
 	xor bh, bh
-	mov dh, 23
-	mov dl, 24 ; 29
+	mov dh, ScorePrintStartLine
+	mov dl, ScorePrintStartRow
 	mov ah, 2
 	int 10h
 
 	mov ah, 9
 	mov dx, offset ScoreString
 	int 21h
-
-	;Combo label #Jieco:
-	call DisplayCombo
 
 	ret
 endp PrintStatsArea
@@ -155,41 +278,41 @@ endp PrintStatsArea
 ;----------------------------------------------
 proc UpdateLives
 	;Clear previous hearts:
-	push 64
-	push 14
-	push HeartsPrintStartLine
-	push HeartsPrintStartRow
-	push BlackColor
-	call PrintColor
+	; push 64											
+	; push 14
+	; push BHealthPrintStartLine
+	; push BHealthPrintStartRow
+	; push BlackColor
+	; call PrintColor
 
-	push offset HeartFileName
-	push offset HeartFileHandle
+	push offset BHealthFileName
+	push offset BHealthFileHandle
 	call OpenFile
 
 	;Print amount of lifes remaining:
 	xor ch, ch
 	mov cl, [LivesRemaining]
 
-	mov bx, HeartsPrintStartRow
+	mov bx, BHealthPrintStartRow
 
-@@printHeart:
+@@printBHealth:
 	push bx
 	push cx
 
-	push [HeartFileHandle]
-	push HeartLength
-	push HeartHeight
-	push HeartsPrintStartLine
+	push [BHealthFileHandle]
+	push BHealthLength
+	push BHealthHeight
+	push BHealthPrintStartLine
 	push bx
 	push offset FileReadBuffer
 	call PrintBMP
 
-	pop cx
-	pop bx
-	add bx, 20
-	loop @@printHeart
+	pop cx							
+	pop bx							
+	add bx, 8
+	loop @@printBHealth
 
-	push [HeartFileHandle]
+	push [BHealthFileHandle]
 	call CloseFile
 
 	ret
@@ -201,13 +324,13 @@ endp UpdateLives
 ;--------------------------------------------------------------------
 proc UpdateScoreStat
 	xor bh, bh
-	mov dh, 23
-	mov dl, 31
+	mov dh, ScoreValPrintStartLine
+	mov dl, ScoreValPrintStartRow
 	mov ah, 2
 	int 10h
 
 	xor ah, ah
-	mov al, [Score]
+	mov ax, [word ptr Score]
 	push ax
 	call HexToDecimal
 
@@ -229,8 +352,8 @@ endp UpdateScoreStat
 proc UpdatePlayerStats
 	;Update level:
 	xor bh, bh
-	mov dh, 23
-	mov dl, 8
+	mov dh, LevelValPrintStartLine
+	mov dl, LevelValPrintStartRow
 	mov ah, 2
 	int 10h
 
@@ -296,13 +419,62 @@ proc InitializeLevel
 
 @@checkLevelTwo:
 	cmp [byte ptr Level], 2
-	jne @@setLevelThree
+	jne @@checkLevelThree
 
 	mov [byte ptr AliensShootingMaxAmount], 5
 	jmp @@resetDidNotDieBool
 
-@@setLevelThree:
+@@checkLevelThree:
+	cmp [byte ptr Level], 3
+	jne @@checkLevelFour
+
 	mov [byte ptr AliensShootingMaxAmount], 7
+	jmp @@resetDidNotDieBool
+
+@@checkLevelFour:
+	cmp [byte ptr Level], 4
+	jne @@checkLevelFive
+
+	mov [byte ptr AliensShootingMaxAmount], 8
+	jmp @@resetDidNotDieBool
+
+@@checkLevelFive:
+	cmp [byte ptr Level], 5
+	jne @@checkLevelSix
+
+	mov [byte ptr AliensShootingMaxAmount], 9
+	jmp @@resetDidNotDieBool
+
+@@checkLevelSix:
+	cmp [byte ptr Level], 6
+	jne @@checkLevelSeven
+
+	mov [byte ptr AliensShootingMaxAmount], 10
+	jmp @@resetDidNotDieBool
+
+@@checkLevelSeven:
+	cmp [byte ptr Level], 7
+	jne @@checkLevelEight
+
+	mov [byte ptr AliensShootingMaxAmount], 10
+	jmp @@resetDidNotDieBool
+
+@@checkLevelEight:
+	cmp [byte ptr Level], 8
+	jne @@checkLevelNine
+
+	mov [byte ptr AliensShootingMaxAmount], 10
+	jmp @@resetDidNotDieBool
+
+@@checkLevelNine:
+	cmp [byte ptr Level], 9
+	jne @@setLevelTen
+
+	mov [byte ptr AliensShootingMaxAmount], 10
+	jmp @@resetDidNotDieBool
+
+@@setLevelTen:
+	mov [byte ptr AliensShootingMaxAmount], 10
 
 @@resetDidNotDieBool:
 	mov [byte ptr DidNotDieInLevelBool], 1 ;true
@@ -328,7 +500,7 @@ endp InitializeLevel
 ; Initiating the game, setting the initial values
 ; -----------------------------------------------
 proc InitializeGame
-	mov [byte ptr Score], 0
+	mov [word ptr Score], 300 ; #Jieco
 	mov [byte ptr LivesRemaining], 3
 	mov [byte ptr Level], 1
 
@@ -518,6 +690,7 @@ proc PlayGame
 	call UpdatePlayerStats
 	call UpdateLives
 	call UpdateComboStat ; #Jieco
+	call DisplayCombo
 
 	call CheckAndMoveAliens
 
@@ -606,13 +779,13 @@ proc PlayGame
 	cmp ah, 2Fh ; V (AOE Enable) 
 	je @@enableAOE
 	
-    cmp ah, 2Ch ; Z (Freeze)
+    cmp ah, 2Ch ; Z (Freeze) CP: 5
     je @@freezePressed
 
-    cmp ah, 2Eh ; C (Invincibility)
+    cmp ah, 2Eh ; C (Invincibility) CP: 7
     je @@invincibilityPressed
 
-    cmp ah, 13h ; R (Regenerate Heart)
+    cmp ah, 13h ; R (Regenerate Heart) CP: 9
     je @@regenerateHeart
 
 	cmp ah, 10h ; Q (Secondary Shot)
@@ -646,6 +819,7 @@ proc PlayGame
     mov [word ptr InvincibleCounter], 36 ; 2 seconds
     sub [byte ptr COMBO_VAL], INVINCIBLE_COST ; Reduce combo by cost
     call UpdateComboStat          ; Update combo display
+		call DisplayCombo
     jmp @@readKey
 
 @@freezePressed:
@@ -660,6 +834,7 @@ proc PlayGame
     mov [word ptr FreezeCounter], 54
     sub [byte ptr COMBO_VAL], FREEZE_COST ; Reduce combo by cost
     call UpdateComboStat         ; Update combo display
+		call DisplayCombo
 
     ; Force redraw of aliens to show frozen state immediately
     call ClearAliens
@@ -678,16 +853,19 @@ proc PlayGame
     inc [LivesRemaining]
     sub [byte ptr COMBO_VAL], REGEN_COST ; Reduce combo by cost
     call UpdateComboStat         ; Update combo display
+		call DisplayCombo
     call UpdateLives
     jmp @@readKey
 
 @@enableLaser:
+    cmp [byte ptr PlayerShootingExists], 0
+    jne @@printShooterAgain
 	mov [byte ptr LaserEnabled], 1
     je @@shootPressed
 
 @@enableAOE:
 	mov [byte ptr AOEEnabled], 1
-    je @@shootPressed
+    jmp @@printShooterAgain
 
 @@moveLeft:
     cmp [word ptr ShooterRowLocation], 21
@@ -789,7 +967,7 @@ proc PlayGame
     push ShootingHeight
     push [word ptr SecondaryBulletLineLocation]
     push [word ptr SecondaryShootingRowLocation]
-    push RedColor
+    push YellowColor
     call PrintColor
     
     ; Check for alien hits
@@ -849,7 +1027,7 @@ proc PlayGame
 	push 140        ; height
 	push [word ptr PlayerBulletLineLocation]
 	push [word ptr PlayerShootingRowLocation]
-	push BlueColor
+	push RedColor
 	call PrintColor
 	jmp @@clearShot
 
@@ -859,7 +1037,12 @@ proc PlayGame
 	push ShootingHeight
 	push [word ptr PlayerBulletLineLocation]
 	push [word ptr PlayerShootingRowLocation]
-	push BlueColor
+	mov al, BlueColor
+	cmp [byte ptr AOEEnabled], 1
+	jne @@normalColor
+	mov al, OrangeColor
+@@normalColor:
+	push ax
 	call PrintColor
 	jmp @@clearShot
 
@@ -893,17 +1076,25 @@ proc PlayGame
 	push ax
 	push [word ptr PlayerBulletLineLocation]
 	push [word ptr PlayerShootingRowLocation]
-	push BlueColor
+	mov al, BlueColor
+	cmp [byte ptr AOEEnabled], 1
+	jne @@normalColorMove
+	mov al, OrangeColor
+@@normalColorMove:
+	push ax
 	call PrintColor
 	jmp @@clearShot
 
 @@removeShot:
 	call ResetCombo				; Resets combo #Jieco
-	call UpdateComboStat	; Reflect changes on screen 
+	call UpdateComboStat	; Reflect changes on screen 	
+	call DisplayCombo
 
 	mov [byte ptr PlayerShootingExists], 0
 	mov [word ptr PlayerBulletLineLocation], 0
 	mov [word ptr PlayerShootingRowLocation], 0
+	mov [byte ptr AOEKillDirection], 0
+    mov [byte ptr AOEEnabled], 0
 
 @@clearShot:
 	push 2
@@ -1013,15 +1204,15 @@ proc PlayGame
 	call ResetCombo
 
 	;sub 5 score if possible, if he doesn't have 5 yet, just reset to 0:
-	cmp [byte ptr Score], 5
+	cmp [word ptr Score], 5
 	jb @@resetScoreAfterDeath
 
-	sub [byte ptr Score], 5
+	sub [word ptr Score], 5
 	jmp @@resetBeforeContinueAfterDeath
 
 
 @@resetScoreAfterDeath:
-	mov [byte ptr Score], 0
+	mov [word ptr Score], 0
 
 @@resetBeforeContinueAfterDeath:
 	call MoveToStart
@@ -1067,7 +1258,7 @@ proc PlayGame
 	int 21h
 	
 	xor ah, ah
-	mov al, [Score]
+	mov ax, [Score]
 	push ax
 	call HexToDecimal
 
@@ -1094,7 +1285,7 @@ proc PlayGame
 	cmp [byte ptr DidNotDieInLevelBool], 1
 	jne @@SkipPerfectLevelBonus
 
-	add [byte ptr Score], 5 ;special bonus for perfect level (no death in level)
+	add [word ptr Score], 5 ;special bonus for perfect level (no death in level)
 
 	;print bonus message:
 	mov ah, 2
@@ -1115,7 +1306,7 @@ proc PlayGame
 
 @@SkipPerfectLevelBonus:
 
-	cmp [byte ptr Level], 3 ; maximum level
+	cmp [byte ptr Level], 9 ; maximum level is now 9
 	je @@printWin
 
 
@@ -1126,7 +1317,8 @@ proc PlayGame
 	jmp @@firstLevelPrint
 
 @@printWin:
-; Print win message to user (finished 3 levels):
+; Print win message to user (finished 6 levels):
+; Print win message to user (finished 6 levels):
 
 	call PrintBackground
 
@@ -1152,7 +1344,7 @@ proc PlayGame
 	int 21h
 
 	xor ah, ah
-	mov al, [Score]
+	mov ax, [Score]
 	push ax
 	call HexToDecimal
 
