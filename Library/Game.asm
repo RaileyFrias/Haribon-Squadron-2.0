@@ -1021,11 +1021,11 @@ proc PlayGame
 	call OpenFile
 
 @@endShipSelect:
-	push offset SShieldFileName
+	push offset GLSS1FileName
 	push offset SShieldFileHandle
 	call OpenFile
 
-	push offset RShieldFileName
+	push offset GLSS0FileName
 	push offset RShieldFileHandle
 	call OpenFile
 
