@@ -95,6 +95,7 @@ include "Library/NAssets.asm"
 	FileReadBuffer					db	320 dup (?)
 
 	LaserEnabled	 				db 	?
+	LaserRow						dw  ?
 	AOEEnabled						db	0
 	AOEKillDirection				db  0 ; 0 - None, 1 - Right, 2 - Left (For splatter)
 
@@ -103,7 +104,7 @@ include "Library/NAssets.asm"
 	GreenColor						equ	30h
 	RedColor						equ	40
 	BlueColor						equ	54
-	WhiteColor						equ	255
+	WhiteColor						equ	15
 	OrangeColor						equ 6
 	YellowColor					    equ 0Eh 
 
@@ -114,15 +115,52 @@ include "Library/Combo.asm"
 
 ; -----------------------------------------------------------
 ; Prints the background image of the game (space background)
+; Changes background based on current level:
+; Levels 1-3: SpaceBg.bmp
+; Levels 4-6: SpaceBg2.bmp
+; Levels 7-9: SpaceBg3.bmp
 ; -----------------------------------------------------------
 proc PrintBackground
 	call playSoundMenu
 
+	; Select background based on level
+	cmp [byte ptr Level], 4
+	jb @@useBackground1  ; If level < 4, use first background
+	cmp [byte ptr Level], 7
+	jb @@useBackground2  ; If 4 <= level < 7, use second background
+	jmp @@useBackground3 ; Otherwise use third background
+
+@@useBackground1:
 	push offset SpaceBgFileName
 	push offset SpaceBgFileHandle
+	jmp @@openFile
+
+@@useBackground2:
+	push offset SpaceBg2FileName
+	push offset SpaceBg2FileHandle
+	jmp @@openFile
+
+@@useBackground3:
+	push offset SpaceBg3FileName
+	push offset SpaceBg3FileHandle
+
+@@openFile:
 	call OpenFile
 
+	; Get the handle from the correct variable based on which background we're using
+	cmp [byte ptr Level], 4
+	jb @@useHandle1
+	cmp [byte ptr Level], 7
+	jb @@useHandle2
+	push [SpaceBg3FileHandle]
+	jmp @@printBMP
+@@useHandle1:
 	push [SpaceBgFileHandle]
+	jmp @@printBMP
+@@useHandle2:
+	push [SpaceBg2FileHandle]
+
+@@printBMP:
 	push 320
 	push 200
 	push 0
@@ -130,7 +168,20 @@ proc PrintBackground
 	push offset FileReadBuffer
 	call PrintBMP
 
+	; Close the correct file handle
+	cmp [byte ptr Level], 4
+	jb @@closeHandle1
+	cmp [byte ptr Level], 7
+	jb @@closeHandle2
+	push [SpaceBg3FileHandle]
+	jmp @@closeFile
+@@closeHandle1:
 	push [SpaceBgFileHandle]
+	jmp @@closeFile
+@@closeHandle2:
+	push [SpaceBg2FileHandle]
+
+@@closeFile:
 	call CloseFile
 
 	ret
@@ -481,6 +532,8 @@ proc InitializeLevel
 
 	call MoveToStart
 
+	; #Jieco
+	call ResetCombo ; resets combo every stage cleared
 
 	cld
 	push ds
@@ -591,8 +644,8 @@ proc CheckIfAliensReachedBottom
 	mov bx, 16
 
 @@checkLineTwo:
-	cmp [AliensStatusArray + bx], 0
-	jne @@lineTwoNotEmpty
+	cmp [AliensStatusArray + bx], 1
+	je @@lineTwoNotEmpty
 
 	inc bx
 	loop @@checkLineTwo
@@ -601,8 +654,8 @@ proc CheckIfAliensReachedBottom
 	mov bx, 8
 
 @@checkLineOne:
-	cmp [AliensStatusArray + bx], 0
-	jne @@lineOneNotEmpty
+	cmp [AliensStatusArray + bx], 1
+	je @@lineOneNotEmpty
 	
 	inc bx
 	loop @@checkLineOne
@@ -611,8 +664,8 @@ proc CheckIfAliensReachedBottom
 	xor bx, bx
 
 @@checkLineZero:
-	cmp [AliensStatusArray + bx], 0
-	jne @@lineZeroNotEmpty
+	cmp [AliensStatusArray + bx], 1
+	je @@lineZeroNotEmpty
 	
 	inc bx
 	loop @@checkLineZero
@@ -651,25 +704,55 @@ endp CheckIfAliensReachedBottom
 ; Handles shooter + Aliens hits and deaths, movements, etc.
 ; -----------------------------------------------------------
 proc PlayGame
+	; Open all alien sprites
 	push offset AlienFileName
 	push offset AlienFileHandle
+	call OpenFile
+
+	push offset Alien2FileName
+	push offset Alien2FileHandle
+	call OpenFile
+
+	push offset Alien3FileName
+	push offset Alien3FileHandle
 	call OpenFile
 
 	push offset FAlienFileName
 	push offset FAlienFileHandle
 	call OpenFile
 
+	push offset FAlien2FileName
+	push offset FAlien2FileHandle
+	call OpenFile
+
+	push offset FAlien3FileName
+	push offset FAlien3FileHandle
+	call OpenFile
+
 	push offset SplatterFileName
 	push offset SplatterFileHandle
 	call OpenFile
 
-	push offset ShooterFileName
+	cmp [byte ptr ShipSelect], 0
+	jne @@openGK
+	
+	push offset GLS0FileName
+	push offset ShooterReloadFileHandle
+	call OpenFile
+	push offset GLS1FileName
+	push offset ShooterFileHandle
+	call OpenFile
+	jmp @@endShipSelect
+
+@@openGK:
+	push offset GKS0FileName
+	push offset ShooterReloadFileHandle
+	call OpenFile
+	push offset GKS1FileName
 	push offset ShooterFileHandle
 	call OpenFile
 
-	push offset ShooterReloadFileName
-	push offset ShooterReloadFileHandle
-	call OpenFile
+@@endShipSelect:
 
 	push offset SShieldFileName
 	push offset SShieldFileHandle
@@ -684,12 +767,12 @@ proc PlayGame
 	call ClearScreen
 
 
-@@firstLevelPrint:
+@@stageOnePrint:
 	call PrintBackground
 	call PrintStatsArea
 	call UpdatePlayerStats
 	call UpdateLives
-	call UpdateComboStat ; #Jieco
+	; call UpdateComboStat ; #Jieco for debugging
 	call DisplayCombo
 
 	call CheckAndMoveAliens
@@ -773,23 +856,26 @@ proc PlayGame
     cmp ah, 4Dh ; Right
     je @@moveRight
 
-	cmp ah, 2Dh ; X (Laser Enable)
-	je @@enableLaser
-
-	cmp ah, 2Fh ; V (AOE Enable) 
-	je @@enableAOE
-	
-    cmp ah, 2Ch ; Z (Freeze) CP: 5
-    je @@freezePressed
-
+	; Skill Selection per Ship
+	cmp [byte ptr ShipSelect], 0
+	jne @@checkGKSkills
     cmp ah, 2Eh ; C (Invincibility) CP: 7
     je @@invincibilityPressed
-
-    cmp ah, 13h ; R (Regenerate Heart) CP: 9
-    je @@regenerateHeart
-
-	cmp ah, 10h ; Q (Secondary Shot)
+	cmp ah, 2Dh ; X (Laser Enable) CP: 5
+	je @@enableLaser
+	cmp ah, 2Ch ; Z (Secondary Shot) CP:3
     je @@secondaryShootPressed
+	jmp @@endSkillCheck
+
+@@checkGKSkills:
+    cmp ah, 2Eh ; C (Regenerate Heart) CP: 9
+    je @@regenerateHeart
+    cmp ah, 2Dh ; X (Freeze) CP: 5
+    je @@freezePressed
+	cmp ah, 2Ch ; Z (AOE Enable) CP: 3
+	je @@enableAOE
+@@endSkillCheck:
+
 
     jmp @@printShooterAgain
 
@@ -818,8 +904,9 @@ proc PlayGame
     mov [byte ptr InvincibleActive], 1   
     mov [word ptr InvincibleCounter], 36 ; 2 seconds
     sub [byte ptr COMBO_VAL], INVINCIBLE_COST ; Reduce combo by cost
-    call UpdateComboStat          ; Update combo display
-		call DisplayCombo
+    ; #Jieco
+		; call UpdateComboStat  ; for debugging
+		call DisplayCombo				; Update combo display
     jmp @@readKey
 
 @@freezePressed:
@@ -833,8 +920,9 @@ proc PlayGame
     mov [byte ptr FreezeActive], 1   
     mov [word ptr FreezeCounter], 54
     sub [byte ptr COMBO_VAL], FREEZE_COST ; Reduce combo by cost
-    call UpdateComboStat         ; Update combo display
-		call DisplayCombo
+    ; #Jieco
+		; call UpdateComboStat  ; for debugging
+		call DisplayCombo				; Update combo display
 
     ; Force redraw of aliens to show frozen state immediately
     call ClearAliens
@@ -852,16 +940,24 @@ proc PlayGame
     ; Regenerate heart and reduce combo
     inc [LivesRemaining]
     sub [byte ptr COMBO_VAL], REGEN_COST ; Reduce combo by cost
-    call UpdateComboStat         ; Update combo display
-		call DisplayCombo
+    ; #Jieco
+		; call UpdateComboStat  ; for debugging
+		call DisplayCombo				; Update combo display
     call UpdateLives
     jmp @@readKey
 
 @@enableLaser:
+    call CheckSkillAvailability    ; Check if skills are available based on current combo
+    cmp [byte ptr COMBO_VAL], 5    ; Check if we have enough combo for laser
+    jb @@printShooterAgain        ; If not enough combo, ignore laser press
     cmp [byte ptr PlayerShootingExists], 0
     jne @@printShooterAgain
-	mov [byte ptr LaserEnabled], 1
-    je @@shootPressed
+    mov [byte ptr LaserEnabled], 1
+    sub [byte ptr COMBO_VAL], 5    ; Deduct combo cost
+    ; #Jieco
+		; call UpdateComboStat  ; for debugging
+		call DisplayCombo				; Update combo display
+    jmp @@shootPressed
 
 @@enableAOE:
 	mov [byte ptr AOEEnabled], 1
@@ -1037,7 +1133,9 @@ proc PlayGame
 	push ShootingHeight
 	push [word ptr PlayerBulletLineLocation]
 	push [word ptr PlayerShootingRowLocation]
-	mov al, BlueColor
+	
+	call BulletColor
+
 	cmp [byte ptr AOEEnabled], 1
 	jne @@normalColor
 	mov al, OrangeColor
@@ -1076,7 +1174,9 @@ proc PlayGame
 	push ax
 	push [word ptr PlayerBulletLineLocation]
 	push [word ptr PlayerShootingRowLocation]
-	mov al, BlueColor
+
+	call BulletColor
+
 	cmp [byte ptr AOEEnabled], 1
 	jne @@normalColorMove
 	mov al, OrangeColor
@@ -1086,9 +1186,10 @@ proc PlayGame
 	jmp @@clearShot
 
 @@removeShot:
-	call ResetCombo				; Resets combo #Jieco
-	call UpdateComboStat	; Reflect changes on screen 	
-	call DisplayCombo
+	; #Jieco
+	call ResetCombo				; Resets combo
+	; call UpdateComboStat	; #Jieco for debugging 	
+	call DisplayCombo			; reflect changes on screen
 
 	mov [byte ptr PlayerShootingExists], 0
 	mov [word ptr PlayerBulletLineLocation], 0
@@ -1201,7 +1302,7 @@ proc PlayGame
 	loop @@blinkShooter
 
 	; reset combo #Jieco 
-	call ResetCombo
+	call ResetCombo	; resets combo upon death
 
 	;sub 5 score if possible, if he doesn't have 5 yet, just reset to 0:
 	cmp [word ptr Score], 5
@@ -1226,7 +1327,7 @@ proc PlayGame
 	call ClearScreen
 
 	
-	jmp @@firstLevelPrint
+	jmp @@stageOnePrint
 
 
 	jmp @@readKey
@@ -1314,7 +1415,7 @@ proc PlayGame
 	call InitializeLevel
 
 	call ClearScreen
-	jmp @@firstLevelPrint
+	jmp @@stageOnePrint
 
 @@printWin:
 ; Print win message to user (finished 6 levels):
@@ -1364,7 +1465,7 @@ proc PlayGame
 	push 54
 	call Delay
 
-@@procEnd:
+@@procEnd:	
 	push [RShieldFileHandle]
 	call CloseFile
 
@@ -1382,10 +1483,23 @@ proc PlayGame
 	push [SplatterFileHandle]
 	call CloseFile
 
+	; Close all alien sprites
 	push [FAlienFileHandle]
 	call CloseFile
 
+	push [FAlien2FileHandle]
+	call CloseFile
+
+	push [FAlien3FileHandle]
+	call CloseFile
+
 	push [AlienFileHandle]
+	call CloseFile
+
+	push [Alien2FileHandle]
+	call CloseFile
+
+	push [Alien3FileHandle]
 	call CloseFile
 
 	push [ExplosionFileHandle]
@@ -1393,3 +1507,15 @@ proc PlayGame
 
 	ret
 endp PlayGame
+
+proc BulletColor
+	; Ship Select Bullet Color
+	cmp [byte ptr ShipSelect], 0
+	jne @@bulletGK	
+	mov al, BlueColor
+	jmp @@endBulletSelect
+@@bulletGK:
+	mov al, WhiteColor
+@@endBulletSelect:
+	ret
+endp BulletColor
