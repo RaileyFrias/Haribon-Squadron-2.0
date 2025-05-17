@@ -1058,7 +1058,7 @@ proc PlayGame
 	mov ah, 2
 	int 21h
 
-	push 0
+	push 18
 	call Delay
 
 	pop dx
