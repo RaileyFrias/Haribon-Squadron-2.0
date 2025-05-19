@@ -11,6 +11,7 @@ include "Library/GAssets.asm"
 include "Library/NAssets.asm"
 
 	DebugBool						db	0
+	UnliSkills						db  0
 
 ; -----------------------------------------------------------
 ; Accessing bitmap files and text files for the game assets
@@ -111,6 +112,7 @@ include "Library/NAssets.asm"
 CODESEG
 include "Library/Alien.asm"
 include "Library/Procs.asm"
+include "Library/SAssets.asm"
 include "Library/Combo.asm"
 
 ; -----------------------------------------------------------
@@ -122,45 +124,19 @@ include "Library/Combo.asm"
 ; -----------------------------------------------------------
 proc PrintBackground
 	call playSoundMenu
-
-	; Select background based on level
-	cmp [byte ptr Level], 4
-	jb @@useBackground1  ; If level < 4, use first background
+	
+	;select bg based on level
 	cmp [byte ptr Level], 7
-	jb @@useBackground2  ; If 4 <= level < 7, use second background
-	jmp @@useBackground3 ; Otherwise use third background
+	je @useBG3
+	cmp [byte ptr Level], 4
+	je @useBG2
 
-@@useBackground1:
+@useBG1:
 	push offset SpaceBgFileName
 	push offset SpaceBgFileHandle
-	jmp @@openFile
-
-@@useBackground2:
-	push offset SpaceBg2FileName
-	push offset SpaceBg2FileHandle
-	jmp @@openFile
-
-@@useBackground3:
-	push offset SpaceBg3FileName
-	push offset SpaceBg3FileHandle
-
-@@openFile:
 	call OpenFile
 
-	; Get the handle from the correct variable based on which background we're using
-	cmp [byte ptr Level], 4
-	jb @@useHandle1
-	cmp [byte ptr Level], 7
-	jb @@useHandle2
-	push [SpaceBg3FileHandle]
-	jmp @@printBMP
-@@useHandle1:
 	push [SpaceBgFileHandle]
-	jmp @@printBMP
-@@useHandle2:
-	push [SpaceBg2FileHandle]
-
-@@printBMP:
 	push 320
 	push 200
 	push 0
@@ -168,23 +144,44 @@ proc PrintBackground
 	push offset FileReadBuffer
 	call PrintBMP
 
-	; Close the correct file handle
-	cmp [byte ptr Level], 4
-	jb @@closeHandle1
-	cmp [byte ptr Level], 7
-	jb @@closeHandle2
-	push [SpaceBg3FileHandle]
-	jmp @@closeFile
-@@closeHandle1:
 	push [SpaceBgFileHandle]
-	jmp @@closeFile
-@@closeHandle2:
-	push [SpaceBg2FileHandle]
-
-@@closeFile:
 	call CloseFile
-
 	ret
+
+@useBG2:
+	push offset SpaceBg2FileName
+	push offset SpaceBg2FileHandle
+	call OpenFile
+
+	push [SpaceBg2FileHandle]
+	push 320
+	push 200
+	push 0
+	push 0
+	push offset FileReadBuffer
+	call PrintBMP
+
+	push [SpaceBg2FileHandle]
+	call CloseFile
+	ret
+	
+@useBG3:
+	push offset SpaceBg3FileName
+	push offset SpaceBg3FileHandle
+	call OpenFile
+
+	push [SpaceBg3FileHandle]
+	push 320
+	push 200
+	push 0
+	push 0
+	push offset FileReadBuffer
+	call PrintBMP
+
+	push [SpaceBg3FileHandle]
+	call CloseFile
+	ret
+
 endp PrintBackground
 
 ; --------------------------------------------------------
@@ -212,71 +209,6 @@ proc PrintStatsArea
 	mov dx, offset LevelString
 	int 21h
 
-@@printGLSkill1:
-	push offset GLSkill1FileName
-	push offset GLSkill1FileHandle	
-	call OpenFile
-
-	push [GLSkill1FileHandle]
-	push SkillLength
-	push SkillHeight
-	push Skill1PrintStartLine
-	push Skill1PrintStartRow
-	push offset FileReadBuffer
-	call PrintBMP
-
-	push [GLSkill1FileHandle]
-	call CloseFile
-
-@@printGLSkill2:
-	push offset GLSkill2FileName
-	push offset GLSkill2FileHandle	
-	call OpenFile
-
-	push [GLSkill2FileHandle]
-	push SkillLength
-	push SkillHeight
-	push Skill2PrintStartLine
-	push Skill2PrintStartRow
-	push offset FileReadBuffer
-	call PrintBMP
-
-	push [GLSkill2FileHandle]
-	call CloseFile
-
-@@printGLSkill3:
-	push offset GLSkill3FileName
-	push offset GLSkill3FileHandle	
-	call OpenFile
-
-	push [GLSkill3FileHandle]
-	push SkillLength
-	push SkillHeight
-	push Skill3PrintStartLine
-	push Skill3PrintStartRow
-	push offset FileReadBuffer
-	call PrintBMP
-
-	push [GLSkill3FileHandle]
-	call CloseFile
-
-
-; @@printSkills:		; #Skills
-; 	push offset SkillsFileName
-; 	push offset SkillsFileHandle	
-; 	call OpenFile
-
-; 	push [SkillsFileHandle]
-; 	push SkillsLength
-; 	push SkillsHeight
-; 	push SkillsPrintStartLine
-; 	push SkillsPrintStartRow
-; 	push offset FileReadBuffer
-; 	call PrintBMP
-
-; 	push [SkillsFileHandle]
-; 	call CloseFile
-
 @@printBattery:
 	push offset BatteryFileName
 	push offset BatteryFileHandle	
@@ -293,22 +225,6 @@ proc PrintStatsArea
 	push [BatteryFileHandle]
 	call CloseFile
 
-; @@printHealth:
-; 	push offset BHealthFileName
-; 	push offset BHealthFileHandle	
-; 	call OpenFile
-
-; 	push [BHealthFileHandle]
-; 	push BHealthLength
-; 	push BHealthHeight
-; 	push BHealthPrintStartLine
-; 	push BHealthPrintStartRow
-; 	push offset FileReadBuffer
-; 	call PrintBMP
-
-; 	push [BHealthFileHandle]
-; 	call CloseFile
-
 	;Score label:
 	xor bh, bh
 	mov dh, ScorePrintStartLine
@@ -320,9 +236,339 @@ proc PrintStatsArea
 	mov dx, offset ScoreString
 	int 21h
 
+@ReprintDynamicLabels: ; #Jieco for hud 
+	call UpdateLives	
+	call UpdateScoreStat
+	call UpdatePlayerStats
+    call CheckSkillAvailability  
+	call UpdateSkills	
+
 	ret
 endp PrintStatsArea
 
+; --------------------------------------------------------
+; Prints and Update skills of the selected ship
+; --------------------------------------------------------
+proc UpdateSkills
+	; GL = 0, GK = 1
+	cmp [byte ptr ShipSelect], 0	; check which ship is selected 
+	jne @@GKSkills
+
+@@GLSkills:
+	call GLBullet
+	call GLLaser
+	cmp [byte ptr InvincibleActive], 1 
+	je @@GLShieldActivated
+	call GLShield
+	ret
+
+@@GLShieldActivated:
+	call GLActivatedShield
+	ret
+
+@@GKSkills:
+	call GKLED
+	call GKFreeze
+	cmp [byte ptr FreezeActive], 1 
+	je @@GKFreezeActivated
+	call GKCharge
+	ret
+
+@@GKFreezeActivated:
+	call GKActivatedFreeze
+	ret
+
+endp UpdateSkills
+
+proc GLBullet
+	cmp [byte ptr CAN_USE_BULLET2], 1 ; to be changed
+	je @@Activate2Bullet
+
+	@@Deactivate2Bullet:
+		push offset GLBulletI_FileName
+		push offset GLBulletI_FileHandle	
+		call OpenFile
+
+		push [GLBulletI_FileHandle]
+		push SkillLength
+		push SkillHeight
+		push Skill1PrintStartLine
+		push Skill1PrintStartRow
+		push offset FileReadBuffer
+		call PrintBMP
+
+		push [GLBulletI_FileHandle]
+		call CloseFile
+		jmp @@endGLBullet
+
+	@@Activate2Bullet:
+		push offset GLBulletA_FileName
+		push offset GLBulletA_FileHandle	
+		call OpenFile
+
+		push [GLBulletA_FileHandle]
+		push SkillLength
+		push SkillHeight
+		push Skill1PrintStartLine
+		push Skill1PrintStartRow
+		push offset FileReadBuffer
+		call PrintBMP
+
+		push [GLBulletA_FileHandle]
+		call CloseFile
+		jmp @@endGLBullet
+
+	@@endGLBullet:
+		ret
+endp GLBullet
+
+proc GLLaser
+	cmp [byte ptr CAN_USE_LASER], 1	; to be changed
+	je @@ActivateLaser
+
+	@@DeactivateLaser:
+		push offset GLLaserI_FileName
+		push offset GLLaserI_FileHandle	
+		call OpenFile
+
+		push [GLLaserI_FileHandle]
+		push SkillLength
+		push SkillHeight
+		push Skill2PrintStartLine
+		push Skill2PrintStartRow
+		push offset FileReadBuffer
+		call PrintBMP
+
+		push [GLLaserI_FileHandle]
+		call CloseFile
+		jmp @@endGLLaser
+
+	@@ActivateLaser:
+		push offset GLLaserA_FileName
+		push offset GLLaserA_FileHandle	
+		call OpenFile
+
+		push [GLLaserA_FileHandle]
+		push SkillLength
+		push SkillHeight
+		push Skill2PrintStartLine
+		push Skill2PrintStartRow
+		push offset FileReadBuffer
+		call PrintBMP
+
+		push [GLLaserA_FileHandle]
+		call CloseFile
+		jmp @@endGLLaser
+
+	@@endGLLaser:
+		ret
+endp GLLaser
+
+proc GLShield
+	cmp [byte ptr CAN_USE_SHIELD], 1	; to be changed
+	je @@ActivateShield
+
+	@@DeactivateShield: 
+		push offset GKShieldI_FileName
+		push offset GKShieldI_FileHandle	
+		call OpenFile
+
+		push [GKShieldI_FileHandle]
+		push SkillLength
+		push SkillHeight
+		push Skill3PrintStartLine
+		push Skill3PrintStartRow
+		push offset FileReadBuffer
+		call PrintBMP
+
+		push [GKShieldI_FileHandle]
+		call CloseFile
+		jmp @@endGLShield
+
+	@@ActivateShield:
+		push offset GKShieldA_FileName
+		push offset GKShieldA_FileHandle	
+		call OpenFile
+
+		push [GKShieldA_FileHandle]
+		push SkillLength
+		push SkillHeight
+		push Skill3PrintStartLine
+		push Skill3PrintStartRow
+		push offset FileReadBuffer
+		call PrintBMP
+
+		push [GKShieldA_FileHandle]
+		call CloseFile
+		jmp @@endGLShield
+	
+	@@endGLShield:
+		ret
+
+endp GLShield
+
+proc GLActivatedShield
+	push offset GKShieldAc_FileName
+	push offset GKShieldAc_FileHandle	
+	call OpenFile
+
+	push [GKShieldAc_FileHandle]
+	push SkillLength
+	push SkillHeight
+	push Skill3PrintStartLine
+	push Skill3PrintStartRow
+	push offset FileReadBuffer
+	call PrintBMP
+
+	push [GKShieldAc_FileHandle]
+	call CloseFile
+	ret
+endp GLActivatedShield
+
+
+proc GKLED
+	cmp [byte ptr CAN_USE_LED], 1	; to be changed
+	je @@ActivateLED
+
+	@@DeactivateLED: 
+		push offset GKLEDI_FileName
+		push offset GKLEDI_FileHandle	
+		call OpenFile
+
+		push [GKLEDI_FileHandle]
+		push SkillLength
+		push SkillHeight
+		push Skill1PrintStartLine
+		push Skill1PrintStartRow
+		push offset FileReadBuffer
+		call PrintBMP
+
+		push [GKLEDI_FileHandle]
+		call CloseFile
+		jmp @@endGKLED
+
+	@@ActivateLED:
+		push offset GKLEDA_FileName
+		push offset GKLEDA_FileHandle	
+		call OpenFile
+
+		push [GKLEDA_FileHandle]
+		push SkillLength
+		push SkillHeight
+		push Skill1PrintStartLine
+		push Skill1PrintStartRow
+		push offset FileReadBuffer
+		call PrintBMP
+
+		push [GKLEDA_FileHandle]
+		call CloseFile
+		jmp @@endGKLED
+
+	@@endGKLED:
+		ret
+endp GKLED
+
+proc GKFreeze
+	cmp [byte ptr CAN_USE_FREEZE], 1	; to be changed
+	je @@ActivateFreeze
+
+	@@DeactivateFreeze: 
+		push offset GKFreezeI_FileName
+		push offset GKFreezeI_FileHandle	
+		call OpenFile
+
+		push [GKFreezeI_FileHandle]
+		push SkillLength
+		push SkillHeight
+		push Skill2PrintStartLine
+		push Skill2PrintStartRow
+		push offset FileReadBuffer
+		call PrintBMP
+
+		push [GKFreezeI_FileHandle]
+		call CloseFile
+		jmp @@endGKFreeze
+
+	@@ActivateFreeze:
+		push offset GKFreezeA_FileName
+		push offset GKFreezeA_FileHandle	
+		call OpenFile
+
+		push [GKFreezeA_FileHandle]
+		push SkillLength
+		push SkillHeight
+		push Skill2PrintStartLine
+		push Skill2PrintStartRow
+		push offset FileReadBuffer
+		call PrintBMP
+
+		push [GKFreezeA_FileHandle]
+		call CloseFile
+		jmp @@endGKFreeze
+
+	@@endGKFreeze:
+		ret
+endp GKFreeze
+
+proc GKActivatedFreeze
+	push offset GKFreezeAc_FileName
+	push offset GKFreezeAc_FileHandle	
+	call OpenFile
+
+	push [GKFreezeAc_FileHandle]
+	push SkillLength
+	push SkillHeight
+	push Skill2PrintStartLine
+	push Skill2PrintStartRow
+	push offset FileReadBuffer
+	call PrintBMP
+
+	push [GKFreezeAc_FileHandle]
+	call CloseFile
+	ret
+endp GKActivatedFreeze
+
+proc GKCharge
+	cmp [byte ptr CAN_USE_REGEN], 1	; to be changed
+	je @@ActivateCharge
+
+	@@DeactivateCharge: 
+		push offset GLChargeI_FileName
+		push offset GLChargeI_FileHandle	
+		call OpenFile
+
+		push [GLChargeI_FileHandle]
+		push SkillLength
+		push SkillHeight
+		push Skill3PrintStartLine
+		push Skill3PrintStartRow
+		push offset FileReadBuffer
+		call PrintBMP
+
+		push [GLChargeI_FileHandle]
+		call CloseFile
+		jmp @@endGKCharge
+
+	@@ActivateCharge:
+		push offset GLChargeA_FileName
+		push offset GLChargeA_FileHandle	
+		call OpenFile
+
+		push [GLChargeA_FileHandle]
+		push SkillLength
+		push SkillHeight
+		push Skill3PrintStartLine
+		push Skill3PrintStartRow
+		push offset FileReadBuffer
+		call PrintBMP
+
+		push [GLChargeA_FileHandle]
+		call CloseFile
+		jmp @@endGKCharge
+
+	@@endGKCharge:
+		ret
+endp GKCharge
 
 ;----------------------------------------------
 ; Updates the amount of lives shown on screen
@@ -533,7 +779,7 @@ proc InitializeLevel
 	call MoveToStart
 
 	; #Jieco
-	call ResetCombo ; resets combo every stage cleared
+	; call ResetCombo ; resets combo every stage cleared ;reimplement if needed
 
 	cld
 	push ds
@@ -553,7 +799,7 @@ endp InitializeLevel
 ; Initiating the game, setting the initial values
 ; -----------------------------------------------
 proc InitializeGame
-	mov [word ptr Score], 300 ; #Jieco
+	mov [word ptr Score], 300
 	mov [byte ptr LivesRemaining], 3
 	mov [byte ptr Level], 1
 
@@ -704,6 +950,11 @@ endp CheckIfAliensReachedBottom
 ; Handles shooter + Aliens hits and deaths, movements, etc.
 ; -----------------------------------------------------------
 proc PlayGame
+	cmp [byte ptr DebugBool], 1
+	jne @@skipDebug
+	mov [byte ptr  UnliSkills], 1
+
+@@skipDebug:
 	; Open all alien sprites
 	push offset AlienFileName
 	push offset AlienFileHandle
@@ -733,9 +984,11 @@ proc PlayGame
 	push offset SplatterFileHandle
 	call OpenFile
 
+	; GL = 0, GK = 1
 	cmp [byte ptr ShipSelect], 0
 	jne @@openGK
 	
+@@openGL:
 	push offset GLS0FileName
 	push offset ShooterReloadFileHandle
 	call OpenFile
@@ -753,12 +1006,11 @@ proc PlayGame
 	call OpenFile
 
 @@endShipSelect:
-
-	push offset SShieldFileName
+	push offset GLSS1FileName
 	push offset SShieldFileHandle
 	call OpenFile
 
-	push offset RShieldFileName
+	push offset GLSS0FileName
 	push offset RShieldFileHandle
 	call OpenFile
 
@@ -770,9 +1022,8 @@ proc PlayGame
 @@stageOnePrint:
 	call PrintBackground
 	call PrintStatsArea
+	call UpdateSkills
 	call UpdatePlayerStats
-	call UpdateLives
-	; call UpdateComboStat ; #Jieco for debugging
 	call DisplayCombo
 
 	call CheckAndMoveAliens
@@ -807,7 +1058,7 @@ proc PlayGame
 	mov ah, 2
 	int 21h
 
-	push 18
+	push 0
 	call Delay
 
 	pop dx
@@ -874,16 +1125,34 @@ proc PlayGame
     je @@freezePressed
 	cmp ah, 2Ch ; Z (AOE Enable) CP: 3
 	je @@enableAOE
+
 @@endSkillCheck:
-
-
     jmp @@printShooterAgain
+
+
+; ================================
+; Skills Checker Format:
+; 	Skill Conditions
+; 	Unli Skill Conditions
+;	Combo Conditions
+; 	Skill Function
+; ================================
+
 
 @@secondaryShootPressed:
     cmp [byte ptr SecondaryShootingExists], 0
     jne @@printShooterAgain
-    call playSoundShoot
 
+    cmp [byte ptr UnliSkills], 1
+    je @@skillFunctionBullet2
+	
+    cmp [byte ptr CAN_USE_BULLET2], 0  
+    je @@readKey                  
+    sub [byte ptr COMBO_VAL], BULLET2_COST
+	call DisplayCombo				
+
+	@@skillFunctionBullet2:
+    call PlaySoundSecondBullet     ; Add sound for secondary bullet
     mov ax, ShooterLineLocation
     sub ax, 6
     mov [word ptr SecondaryBulletLineLocation], ax
@@ -894,72 +1163,88 @@ proc PlayGame
     jmp @@printShooterAgain
 
 @@invincibilityPressed:
-    call CheckSkillAvailability    ; Check if skills are available based on current combo
-    cmp [byte ptr CAN_USE_INVINCIBLE], 0  ; Check if we have enough combo for invincibility
-    je @@readKey                   ; If not enough combo, ignore key press
-    cmp [byte ptr InvincibleActive], 1  ; Check if already invincible
+	cmp [byte ptr InvincibleActive], 1 
     je @@readKey
+
+    cmp [byte ptr UnliSkills], 1
+    je @@skillFunctionInvincibility
+	
+    cmp [byte ptr CAN_USE_SHIELD], 0  
+    je @@readKey                  
+    sub [byte ptr COMBO_VAL], SHIELD_COST
+	call DisplayCombo
     
-    ; Activate invincibility and reduce combo
+	@@skillFunctionInvincibility:
+    call PlaySoundShieldActivate   ; Add shield activation sound
     mov [byte ptr InvincibleActive], 1   
-    mov [word ptr InvincibleCounter], 36 ; 2 seconds
-    sub [byte ptr COMBO_VAL], INVINCIBLE_COST ; Reduce combo by cost
-    ; #Jieco
-		; call UpdateComboStat  ; for debugging
-		call DisplayCombo				; Update combo display
-    jmp @@readKey
+    mov [word ptr InvincibleCounter], 36
+    jmp @@printShooterAgain
 
 @@freezePressed:
-    call CheckSkillAvailability   
-    cmp [byte ptr CAN_USE_FREEZE], 0    ; Check if we have enough combo for freeze
-    je @@readKey                  ; If not enough combo, ignore key press
-    cmp [byte ptr FreezeActive], 1  
+	cmp [byte ptr FreezeActive], 1 
     je @@readKey
-    
-    ; Activate freeze and reduce combo
+
+    cmp [byte ptr UnliSkills], 1
+    je @@skillFunctionFreeze
+	
+    cmp [byte ptr CAN_USE_FREEZE], 0  
+    je @@readKey                  
+    sub [byte ptr COMBO_VAL], FREEZE_COST
+	call DisplayCombo
+
+    @@skillFunctionFreeze:
+    call PlaySoundFreezeActivate   ; Add freeze activation sound
     mov [byte ptr FreezeActive], 1   
     mov [word ptr FreezeCounter], 54
-    sub [byte ptr COMBO_VAL], FREEZE_COST ; Reduce combo by cost
-    ; #Jieco
-		; call UpdateComboStat  ; for debugging
-		call DisplayCombo				; Update combo display
-
-    ; Force redraw of aliens to show frozen state immediately
     call ClearAliens
     call PrintAliens
-    
     jmp @@readKey
 
-@@regenerateHeart:
-    call CheckSkillAvailability
-    cmp [byte ptr CAN_USE_REGEN], 0     ; Check if we have enough combo for heart regen
-    je @@readKey                  ; If not enough combo, ignore key press
-    cmp [LivesRemaining], 3 ; Max lives is 3
+@@regenerateHeart:	
+	cmp [LivesRemaining], 3 ; Max lives is 3
     jae @@readKey
 
-    ; Regenerate heart and reduce combo
+    cmp [byte ptr UnliSkills], 1
+    je @@skillFunctionRegenerate
+	
+    cmp [byte ptr CAN_USE_REGEN], 0  
+    je @@readKey                  
+    sub [byte ptr COMBO_VAL], REGEN_COST
+	call DisplayCombo
+
+	@@skillFunctionRegenerate:
+    call PlaySoundHeal             ; Add healing sound
     inc [LivesRemaining]
-    sub [byte ptr COMBO_VAL], REGEN_COST ; Reduce combo by cost
-    ; #Jieco
-		; call UpdateComboStat  ; for debugging
-		call DisplayCombo				; Update combo display
     call UpdateLives
     jmp @@readKey
 
 @@enableLaser:
-    call CheckSkillAvailability    ; Check if skills are available based on current combo
-    cmp [byte ptr COMBO_VAL], 5    ; Check if we have enough combo for laser
-    jb @@printShooterAgain        ; If not enough combo, ignore laser press
     cmp [byte ptr PlayerShootingExists], 0
-    jne @@printShooterAgain
+    jne @@readKey
+
+    cmp [byte ptr UnliSkills], 1
+    je @@skillFunctionLaser
+	
+    cmp [byte ptr CAN_USE_LASER], 0  
+    je @@readKey                  
+    sub [byte ptr COMBO_VAL], LASER_COST
+	call DisplayCombo
+
+	@@skillFunctionLaser:
     mov [byte ptr LaserEnabled], 1
-    sub [byte ptr COMBO_VAL], 5    ; Deduct combo cost
-    ; #Jieco
-		; call UpdateComboStat  ; for debugging
-		call DisplayCombo				; Update combo display
     jmp @@shootPressed
 
 @@enableAOE:
+    cmp [byte ptr UnliSkills], 1
+    je @@skillFunctionAOE
+	
+    cmp [byte ptr CAN_USE_LED], 0  
+    je @@readKey                  
+    sub [byte ptr COMBO_VAL], LED_COST
+	call DisplayCombo
+
+	@@skillFunctionAOE:
+    call PlaySoundBombActivate     ; Add AOE/LED activation sound
 	mov [byte ptr AOEEnabled], 1
     jmp @@printShooterAgain
 
@@ -1041,6 +1326,17 @@ proc PlayGame
 	call PrintBMP
 
 @@checkShotStatus:
+	; Update invincibility counter if active
+	cmp [InvincibleCounter], 0
+	je @@checkSecondaryShot
+	
+	dec [InvincibleCounter]
+	cmp [InvincibleCounter], 0
+	jne @@checkSecondaryShot
+	
+	mov [byte ptr InvincibleActive], 0   ; Disable invincibility when counter reaches 0
+
+@@checkSecondaryShot:
     ; Handle secondary shot movement and clearing
     cmp [byte ptr SecondaryShootingExists], 1
     jne @@checkMainShot
@@ -1069,16 +1365,6 @@ proc PlayGame
     ; Check for alien hits
     call CheckAndHitAlienSecondary
     jmp @@checkMainShot
-	
-	; Update invincibility counter if active
-	cmp [InvincibleCounter], 0
-	je @@checkMainShot
-	
-	dec [InvincibleCounter]
-	cmp [InvincibleCounter], 0
-	jne @@checkMainShot
-	
-	mov [byte ptr InvincibleActive], 0   ; Disable invincibility when counter reaches 0
     
 @@removeSecondaryShot:
     mov [byte ptr SecondaryShootingExists], 0
@@ -1097,7 +1383,12 @@ proc PlayGame
 	;Check if shooting already exists in screen:
 	cmp [byte ptr PlayerShootingExists], 0
 	jne @@moveShootingUp
+	cmp [byte ptr LaserEnabled], 1
+	je @@playLaser
 	call playSoundShoot
+	jmp @@initiateShot
+	@@playLaser:
+    call PlaySoundLaser
 
 
 @@initiateShot:
@@ -1189,7 +1480,8 @@ proc PlayGame
 	; #Jieco
 	call ResetCombo				; Resets combo
 	; call UpdateComboStat	; #Jieco for debugging 	
-	call DisplayCombo			; reflect changes on screen
+	; call DisplayCombo			; reflect changes on screen
+
 
 	mov [byte ptr PlayerShootingExists], 0
 	mov [word ptr PlayerBulletLineLocation], 0
@@ -1215,7 +1507,7 @@ proc PlayGame
 	call PrintColor
 
 	cmp [byte ptr AliensLeftAmount], 0
-	je @@setNewLevel
+	jbe @@setNewLevel
 
 	;Check if Alien hit:
 	call CheckAndHitAlien
@@ -1224,7 +1516,12 @@ proc PlayGame
 @@moveAliens:
 	call ClearAliensShots
 
+	; for re-displaying hud
+	call DisplayCombo
+	; call @@printShooterAgain		; prints shooter but flickers upon being called
+	
 	call CheckAndMoveAliens
+	call PrintStatsArea
 	
 	call CheckIfAliensReachedBottom
 	cmp ax, 1

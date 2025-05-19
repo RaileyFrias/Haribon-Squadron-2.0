@@ -111,7 +111,7 @@ proc PrintMainMenu
 	xor ah, ah
 	int 16h
 
-	cmp ah, 19h ;P key
+	cmp ah, 1ch ;P key
 	je @@play
 
 	cmp ah, 17h ;I key
@@ -142,21 +142,21 @@ proc PrintMainMenu
 	jmp @@getAmountFirstTime
 
 @@createNewFile:
-	xor cx, cx
-	mov dx, offset ScoresFileName
-	mov ah, 3Ch
-	int 21h
+    ; Create new file
+    xor cx, cx
+    mov dx, offset ScoresFileName
+    mov ah, 3Ch
+    int 21h
+    mov [ScoresFileHandle], ax
 
-	mov [ScoresFileHandle], ax ;save new FileHandle
-
-	;set current scores amount to zero (new file...):
-	mov [byte ptr FileReadBuffer], 0
-
-	mov ah, 40h
-	mov bx, [ScoresFileHandle]
-	mov cx, 1
-	mov dx, offset FileReadBuffer
-	int 21h
+    ; Initialize with 0 scores
+    xor al, al
+    mov [FileReadBuffer], al
+    mov ah, 40h
+    mov bx, [ScoresFileHandle]
+    mov cx, 1
+    mov dx, offset FileReadBuffer
+    int 21h
 
 @@getAmountFirstTime:
 	;set score file pointer to start:
@@ -185,19 +185,19 @@ proc PrintMainMenu
 	xor al, al
 	mov bx, [ScoresFileHandle]
 	xor cx, cx
-	mov dx, 45 ;score of 5th place
+	mov dx, 49 ; Position to read 5th place score (1 + 40 + 8)
 	int 21h
 
 	;get 5th place score:
 	mov ah, 3Fh
 	mov bx, [ScoresFileHandle]
-	mov cx, 1
+	mov cx, 2  ; read 2 bytes for score
 	mov dx, offset FileReadBuffer
 	int 21h
-
-	mov al, [FileReadBuffer]
-	cmp ax, [Score]
-	ja @@printMenu ;if current score is lower than 5th place, don't ask
+	
+	mov ax, [word ptr FileReadBuffer]
+	cmp [Score], ax     ; Compare current score with 5th place score
+	jbe @@closeAndPrintMenu     ; If current score is lower or equal, don't ask
 
 @@okToAsk:
 	push offset AskSaveFileName
@@ -215,10 +215,10 @@ proc PrintMainMenu
 	xor ah, ah
 	int 16h
 
-	cmp ah, 31h ;N key
-	je @@printMenu
+	cmp ah, 01 ;N key
+	je @@closeAndPrintMenu
 
-	cmp ah, 15h ;Y key
+	cmp ah, 1ch ;Y key
 	jne @@askYN
 	
 	;ask user for name:
@@ -226,10 +226,21 @@ proc PrintMainMenu
 
 	call PrintBackground
 
+; First line (Use the keyboard)
 	mov ah, 2
 	xor bh, bh
-	mov dh, 12
-	mov dl, 5
+	mov dh, 11          ; One line higher
+	mov dl, 11           ; More to the left
+	int 10h
+
+	mov ah, 9
+	mov dx, offset UseTheKeyboardString
+	int 21h
+
+	; Second line (Enter your name)
+	mov ah, 2
+	mov dh, 12          ; Next line
+	mov dl, 7           ; Same column alignment
 	int 10h
 
 	mov ah, 9
@@ -237,6 +248,13 @@ proc PrintMainMenu
 	int 21h
 
 ;Get name:
+
+
+	; Third line (Input field)
+	mov ah, 2
+	mov dh, 16          ; Next line
+	mov dl, 15           ; Same column alignment
+	int 10h
 
 	;zero the current info at 'buffer'
 	push ds
@@ -296,7 +314,7 @@ proc PrintMainMenu
 	;check where to initially place new score, before putting in correct rank:
 	mov al, [FileReadBuffer]
 	dec al
-	mov bl, 9 ;every score is 9 bytes (8 name + 1 score)
+	mov bl, 10 ;every score is 10 bytes (8 name + 2 score)
 	mul bl
 
 	mov dx, ax
@@ -310,49 +328,61 @@ proc PrintMainMenu
 
 	jmp @@moveNameAndScoreToFile
 
+; Add new cleanup label
+@@closeAndPrintMenu:
+    push [ScoresFileHandle]    ; Close scores file
+    call CloseFile
+    jmp @@printMenu
+
 @@replaceWithFifthPlace:
-	mov ah, 42h
-	mov al, 1
-	mov bx, [ScoresFileHandle]
-	xor cx, cx
-	mov dx, 36 ;start of 5th place in file
-	int 21h
-
-	jmp @@moveNameAndScoreToFile
-
+    ; Position file pointer at 5th entry (1 byte header + 4*10 bytes)
+    mov ah, 42h
+    mov al, 1         
+    mov bx, [ScoresFileHandle]
+    xor cx, cx
+    mov dx, 40         ; Start of 5th record
+    int 21h
+    jmp @@moveNameAndScoreToFile
 
 @@putScoreIfTableIsEmpty:
-	;set file pointer to start of file:
-	mov ah, 42h
-	xor al, al
-	mov bx, [ScoresFileHandle]
-	xor cx, cx
-	xor dx, dx
-	int 21h
+    ; Position at start to update count
+    mov ah, 42h
+    xor al, al
+    mov bx, [ScoresFileHandle]
+    xor cx, cx
+    xor dx, dx
+    int 21h
 
-	mov [byte ptr FileReadBuffer], 1
+    ; Write count of 1
+    mov [byte ptr FileReadBuffer], 1
+    mov ah, 40h
+    mov bx, [ScoresFileHandle]
+    mov cx, 1
+    mov dx, offset FileReadBuffer
+    int 21h
 
-	;move updated amount of players to file:
-	mov ah, 40h
-	mov bx, [ScoresFileHandle]
-	mov cx, 1 ;one byte
-	mov dx, offset FileReadBuffer
-	int 21h
+    ; Position after header for writing score
+    mov ah, 42h
+    mov al, 0
+    mov bx, [ScoresFileHandle]
+    xor cx, cx
+    mov dx, 1          ; Skip header byte
+    int 21h
 
 @@moveNameAndScoreToFile:
-	;Move name to file
-	mov ah, 40h
-	mov bx, [ScoresFileHandle]
-	mov cx, 8 ;name length
-	mov dx, offset FileReadBuffer + 3
-	int 21h
+    ; Write name (8 bytes)
+    mov ah, 40h
+    mov bx, [ScoresFileHandle]
+    mov cx, 8
+    mov dx, offset FileReadBuffer + 3
+    int 21h
 
-	;Move score to file:
-	mov ah, 40h
-	mov bx, [ScoresFileHandle]
-	mov cx, 1 ;one byte
-	mov dx, offset Score
-	int 21h
+    ; Write score (2 bytes)
+    mov ah, 40h
+    mov bx, [ScoresFileHandle]
+    mov cx, 2
+    mov dx, offset Score
+    int 21h
 
 
 	push [ScoresFileHandle]
@@ -440,7 +470,7 @@ proc PrintShipSelection
 	cmp ah, 4bh ;left arrow
 	je @@printGLSelect
 
-	cmp ah, 1 ;Esc key
+	cmp ah, 01 ;Esc key
 	je @@exitShipSelection
 
 	cmp ah, 1ch ;enter key
@@ -584,7 +614,7 @@ endp PrintInstructions
 proc PrintHighScoreTable
 	;Score file structure:
 	;first byte - amount of players in table
-	;then 8 bytes of name, and a byte of score  x5 times
+	;then 8 bytes of name, and 2 bytes of score  x5 times
 
 	call ClearScreen
 
@@ -772,8 +802,15 @@ proc PrintHighScoreTable
 	mov [byte ptr FileReadBuffer + 9], '$'
 	
 	mov ah, 9
+	mov dx, offset FileReadBuffer + 1
 	int 21h
 
+	;read score (2 bytes):
+	mov ah, 3Fh
+	mov bx, [ScoresFileHandle]
+	mov cx, 2
+	mov dx, offset FileReadBuffer + 1
+	int 21h
 
 	pop dx
 	push dx
@@ -784,16 +821,8 @@ proc PrintHighScoreTable
 	mov ah, 2
 	int 10h
 
-	;read score:
-	mov ah, 3Fh
-	mov bx, [ScoresFileHandle]
-	mov cx, 1
-	mov dx, offset FileReadBuffer + 1
-	int 21h
-
 	;print score:
-	xor ah, ah
-	mov al, [FileReadBuffer + 1]
+	mov ax, [word ptr FileReadBuffer + 1]
 	push ax
 	call HexToDecimal
 
@@ -867,7 +896,7 @@ proc PrintHighScoreTable
 	xor ah, ah
 	int 16h
 
-	cmp ah, 53h ;Delete
+	cmp ah, 1Ch ;enter
 	je @@printBackgroundAgainBeforeDelete
 
 	cmp ah, 1 ;Esc
